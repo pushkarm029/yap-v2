@@ -1,0 +1,157 @@
+@import 'tailwindcss';
+
+/* iOS PWA Full Height Fix - Prevents white bar at bottom */
+html {
+  min-height: calc(100% + env(safe-area-inset-top));
+  overflow-x: hidden;
+}
+
+/* Font Configuration */
+:root {
+  /* Content font - Inter for readability */
+  --font-content: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* Branding font - Montserrat for personality */
+  --font-brand: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Branding typography classes */
+.font-brand {
+  font-family: var(--font-brand);
+}
+
+/* Logo & Brand Name */
+.text-brand-logo {
+  font-family: var(--font-brand);
+  font-weight: 600; /* Bold */
+  letter-spacing: -0.02em; /* Tight, modern */
+}
+
+/* Taglines & Subtitles */
+.text-brand-subtitle {
+  font-family: var(--font-brand);
+  font-weight: 400; /* Medium */
+  letter-spacing: 0.02em; /* Slightly wider */
+}
+
+/* Headings & CTAs */
+.text-brand-heading {
+  font-family: var(--font-brand);
+  font-weight: 500; /* SemiBold */
+  letter-spacing: -0.01em;
+}
+
+/* Extra Bold for special emphasis */
+.text-brand-display {
+  font-family: var(--font-brand);
+  font-weight: 700; /* ExtraBold */
+  letter-spacing: -0.02em; /* Very tight */
+}
+
+/* iOS PWA Safe Area Support */
+:root {
+  /* Safe area insets for iOS notch/home indicator */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+}
+
+/* Apply safe area padding and overflow controls to body */
+body {
+  overflow-x: hidden;
+  max-width: 100vw;
+  padding-top: var(--safe-area-inset-top);
+  padding-right: var(--safe-area-inset-right);
+  padding-bottom: var(--safe-area-inset-bottom);
+  padding-left: var(--safe-area-inset-left);
+  font-family: var(--font-content);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* iOS Smooth Scrolling */
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent iOS zoom on input focus */
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
+/* Glassmorphism utilities */
+.glass-light {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.glass-dark {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Toast Animation */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out;
+}
+
+/* Bottom Sheet Animation */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Hide background video for users who prefer reduced motion */
+  video {
+    display: none !important;
+  }
+
+  /* Show static background instead */
+  .auth-video-fallback {
+    display: block !important;
+  }
+}
+
+/* Hide gradient fallback by default (only show for reduced motion) */
+.auth-video-fallback {
+  display: none;
+}

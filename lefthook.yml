@@ -1,0 +1,26 @@
+# lefthook.yml
+# Fast, parallel pre-commit hooks using Lefthook (Go-based)
+# Docs: https://lefthook.dev/configuration/
+
+min_version: 1.6.0
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: format
+      glob: '*.{js,jsx,ts,tsx,json,md,css}'
+      run: bunx prettier --write {staged_files}
+      stage_fixed: true
+
+    - name: lint
+      glob: '*.{js,jsx,ts,tsx}'
+      run: bunx eslint --fix {staged_files}
+      stage_fixed: true
+
+    - name: typecheck
+      run: bunx tsc --noEmit
+
+pre-push:
+  jobs:
+    - name: build
+      run: bun run build

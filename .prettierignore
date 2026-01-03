@@ -1,0 +1,32 @@
+# Build outputs
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Generated files
+*.tsbuildinfo
+next-env.d.ts
+public/sw.js
+public/sw.js.map
+
+# Lock files
+bun.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Contracts (Rust)
+contracts/target/
+contracts/**/*.rs
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Misc
+.git/
+.serena/
+coverage/
