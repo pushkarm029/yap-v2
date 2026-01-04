@@ -811,179 +811,92 @@ The zero team allocation and 100% community distribution ensure aligned incentiv
 
 ---
 
-## Appendix: Third-Party Integration Models
+## Appendix: Third-Party Integration
 
-YAP Token is designed as the **social layer of Solana** \- a token that rewards genuine social contribution. This document outlines how third-party applications can integrate with and build upon the YAP protocol.
+YAP is designed as the **social layer of Solana** — a permissionless protocol that rewards genuine social contribution. Any app can integrate.
 
-#### The Core Tradeoff
+### The Architecture
 
-|  More Open  | Anyone can earn tokens (gaming/abuse risk) |
-| :---------: | :----------------------------------------: |
-| More Closed | Only Yap.Network earns (limited ecosystem) |
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      SOLANA BLOCKCHAIN                           │
+│                  All social events are PUBLIC                    │
+└─────────────────────────────────────────────────────────────────┘
+                           │
+         ┌─────────────────┼─────────────────┐
+         ▼                 ▼                 ▼
+   ┌───────────┐     ┌───────────┐     ┌───────────┐
+   │Yap.Network│     │ Gaming    │     │ Prediction│
+   │  (App 1)  │     │ App (2)   │     │ Market (3)│
+   └───────────┘     └───────────┘     └───────────┘
+         │                 │                 │
+         └─────────────────┴─────────────────┘
+                           │
+                           ▼
+                   Same reward pool
+                   Same token economy
+```
 
-#### Model A: Burns Only
+### How Third-Party Apps Integrate
 
-**YAP.NETWORK (Closed)**
+**Step 1: Submit social events**
 
-- Only app that can EARN points
-- Submits merkle roots
-- Controls reward distribution
+Any app can submit memo transactions:
 
-**YAP TOKEN CONTRACT**
+```
+"YAP:{"v":1,"t":"post","h":"QmXyz..."}"
+"YAP:{"v":1,"t":"vote","h":"QmXyz...","w":100000}"
+```
 
-- claim() \- Yap.Network users only
-- burn() \- anyone with tokens
-- transfer() \- standard SPL
+**Step 2: Indexer reads all events**
 
-**THIRD-PARTY APPS (Open)**
+Public data — any app can query via Helius or run their own indexer.
 
-- Can use YAP as currency
-- Can burn YAP for features
-- CANNOT earn new YAP
-- Must acquire YAP on DEX
+**Step 3: Keeper validates and distributes**
 
-### Why Third Parties Would Use YAP
+Daily distribution includes votes from ALL apps. One token economy, many apps.
 
-| Reason                    | Explanation                                                      |
-| :------------------------ | :--------------------------------------------------------------- |
-| **Access to user base**   | Yap.Network users already hold YAP, easy onboarding              |
-| **No token overhead**     | Skip token creation, liquidity bootstrapping, community building |
-| **Scarcity premium**      | YAP's invite-only model \= wealthy, engaged users                |
-| **Burn utility**          | Accept YAP for premium features → burn → increase scarcity       |
-| **Ecosystem credibility** | "Powered by YAP" association                                     |
+**Step 4: Users claim rewards**
 
-### Example: Gaming App Integration
+Authors earn YAP regardless of which app submitted the vote.
 
-**Without YAP:**
+### What Third-Party Apps Can Do
 
-- Create $GAME token
-- Bootstrap $50K liquidity
-- 6 months to build community
-- Token probably fails
+| Action           | Permissionless? | How                    |
+| ---------------- | --------------- | ---------------------- |
+| Submit POSTs     | ✓               | Memo transaction       |
+| Submit VOTEs     | ✓               | Memo transaction       |
+| Read social data | ✓               | Public indexer or RPC  |
+| Users earn YAP   | ✓               | Votes on their content |
+| Claim rewards    | ✓               | Direct contract call   |
+| Burn YAP         | ✓               | Standard SPL burn      |
 
-**With YAP:**
+### Example Integrations
 
-- Accept YAP for in-game items
-- Instant access to Yap community
-- Users already have YAP
-- Focus on game, not tokenomics
+| App Type               | What They Post      | Why Integrate                    |
+| ---------------------- | ------------------- | -------------------------------- |
+| **Gaming app**         | Achievement unlocks | Players earn YAP for milestones  |
+| **Prediction market**  | Trade predictions   | Good calls get upvoted, earn YAP |
+| **NFT platform**       | Mint announcements  | Artists earn from engagement     |
+| **Trading bot**        | Alpha calls         | Verified track record, earn YAP  |
+| **Content aggregator** | Curated posts       | Users earn from curation         |
 
-**Verdict:** Model A works when YAP has proven value. Third parties come after Yap.Network succeeds.
+### Why Use YAP Instead of Creating a Token?
 
-## Model B: Federated Updaters
+| With Custom Token           | With YAP Integration           |
+| --------------------------- | ------------------------------ |
+| Bootstrap $50K liquidity    | Instant DEX liquidity          |
+| 6 months to build community | Access to existing YAP holders |
+| Tokenomics headaches        | Focus on product               |
+| Token probably fails        | Proven token economy           |
 
-Multiple approved applications can distribute YAP rewards to their users.
+### Anti-Gaming Measures
 
-**App Registry Example:**
+| Concern           | How It's Handled                   |
+| ----------------- | ---------------------------------- |
+| Zero-balance spam | Vote weight = 0, no impact         |
+| Bot armies        | Need YAP stake to have weight      |
+| Self-voting farms | Allowed, but proportional to stake |
+| Double-accounting | Claim-time validation              |
 
-| App ID            | Merkle Root | Inflation Share |
-| :---------------- | :---------- | :-------------- |
-| Yap.Network       | 0xabc...    | 70%             |
-| Partner App X     | 0xdef...    | 20%             |
-| Prediction Market | 0x123...    | 10%             |
-
-- Each app submits merkle roots for their users
-- Daily inflation split by allocation percentage
-
-### How It Works
-
-1. Apps apply to join the registry
-2. Governance/admin approves and assigns allocation %
-3. Each app defines their own "work" criteria
-4. Each app submits daily merkle roots
-5. Users claim from whichever app(s) they use
-
-**Pros:** True "social layer" \- multiple apps, one token economy  
-**Cons:** Complex, requires trust/vetting, governance overhead
-
----
-
-## Model B-Alt: Ecosystem Grants
-
-A simpler alternative to federated updaters.
-
-**Grant Application Process:**
-
-1. Third-party app applies with metrics (users, engagement, vision)
-2. Yap.Network reviews and approves
-3. App receives YAP grant to distribute to their users
-4. Milestone-based releases prevent abuse
-
-### Why Apps Apply for Grants
-
-| Motivation                | Benefit                                         |
-| :------------------------ | :---------------------------------------------- |
-| **Free user acquisition** | "Use our app, earn YAP\!" \- powerful marketing |
-| **Instant liquidity**     | YAP already trades on DEX                       |
-| **Ecosystem legitimacy**  | "Official YAP Partner" status                   |
-| **Cross-promotion**       | Access to Yap.Network's user base               |
-| **Focus on product**      | No tokenomics headaches                         |
-
-### Grant Structure Options
-
-**Milestone-Based:**
-
-- Approval: 500K YAP (launch)
-- Month 3: 1,000K YAP (if 1,000 DAU achieved)
-- Month 6: 2,000K YAP (if 5,000 DAU achieved)
-- Month 12: 5,000K YAP (if 20,000 DAU achieved)
-
-**Matching Grants:**
-
-- App burns X YAP → Yap.Network matches with X YAP grant
-- Ensures app has skin in the game
-
----
-
-## Model C: Staked App Operators
-
-Permissionless registration with economic security.
-
-**To become a point-granting app:**
-
-1. Stake 1,000,000 YAP as collateral
-2. Get approved by governance
-3. Submit merkle roots for your users
-4. If caught cheating → stake slashed
-
-**Incentive Alignment:**
-
-- Apps have significant skin in the game
-- Community can challenge fraudulent roots
-- Bad actors lose substantial stake
-- Self-policing ecosystem
-
-**Pros:** Semi-permissionless, strong economic security  
-**Cons:** High barrier to entry, complex challenge/dispute mechanism
-
----
-
-## Model D: On-Chain Social Primitives (Future)
-
-Define universal social actions at the protocol level.
-
-**Social Action Types:**
-
-- `Post` \- content hash
-- `Upvote` \- target user
-- `Comment` \- parent reference \+ content hash
-- `Follow` \- target user
-
-Any app can submit verified actions → protocol rewards based on action type.
-
-**Pros:** Truly decentralized social layer, maximum composability  
-**Cons:** Extremely complex, high gaming risk, content quality verification unsolved
-
----
-
-## Model Comparison
-
-| Aspect              | Model A        | Model B     | Grants     | Model C          | Model D       |
-| :------------------ | :------------- | :---------- | :--------- | :--------------- | :------------ |
-| Third parties earn? | No             | Yes         | One-time   | Yes              | Yes           |
-| Complexity          | Low            | High        | Medium     | High             | Very High     |
-| Trust required      | None           | Vet apps    | Vet apps   | Economic         | None          |
-| Decentralization    | High           | Medium      | Low        | Medium           | High          |
-| Scarcity preserved  | Yes            | Diluted     | Controlled | Diluted          | Diluted       |
-| Gaming risk         | None           | Medium      | Low        | Low              | High          |
-| Best for            | DeFi, payments | Social apps | Partners   | Mature ecosystem | Future vision |
+The protocol trusts economics over access control. Gaming is possible but unprofitable.
