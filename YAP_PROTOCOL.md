@@ -59,13 +59,13 @@ The protocol layer is **permissionless**. Anyone with a Solana wallet holding YA
 
 Individual apps built on the protocol can impose their own rules:
 
-| Rule | Protocol | Yap.Network App |
-|------|----------|-----------------|
-| Access | Anyone with YAP | Invite-only |
-| Daily votes | 8 per wallet | Part of 8 total actions |
-| Same-post voting | Allowed (up to 8x) | One vote per post |
-| Self-voting | Allowed | Discouraged by UX |
-| Purpose | Permissionless infra | Quality community |
+| Rule             | Protocol             | Yap.Network App         |
+| ---------------- | -------------------- | ----------------------- |
+| Access           | Anyone with YAP      | Invite-only             |
+| Daily votes      | 8 per wallet         | Part of 8 total actions |
+| Same-post voting | Allowed (up to 8x)   | One vote per post       |
+| Self-voting      | Allowed              | Discouraged by UX       |
+| Purpose          | Permissionless infra | Quality community       |
 
 **Why restrictions at app level?**
 
@@ -86,11 +86,60 @@ vote_weight = yap_tokens_in_wallet
 **Examples:**
 
 | Holder | YAP Balance | Vote Weight | % of 10M Total |
-|--------|-------------|-------------|----------------|
-| Whale | 1,000,000 | 1,000,000 | 10% |
-| Mid | 100,000 | 100,000 | 1% |
-| Small | 10,000 | 10,000 | 0.1% |
-| Empty | 0 | 0 | 0% |
+| ------ | ----------- | ----------- | -------------- |
+| Whale  | 1,000,000   | 1,000,000   | 10%            |
+| Mid    | 100,000     | 100,000     | 1%             |
+| Small  | 10,000      | 10,000      | 0.1%           |
+| Empty  | 0           | 0           | 0%             |
+
+### Transaction Economics (User Pays)
+
+> **📝 Added Jan 4, 2026**: All protocol participants pay their own transaction fees.
+
+**The Pure Model:**
+
+| Action | Solana Cost | Daily Max (8 actions) |
+| ------ | ----------- | --------------------- |
+| Vote   | ~$0.001     | ~$0.008               |
+| Post   | ~$0.001     | ~$0.008               |
+| Claim  | ~$0.001     | once                  |
+
+**Monthly cost for active user: ~$0.25-0.50**
+
+This is negligible for anyone with meaningful YAP stake.
+
+**Why User Pays:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    THE FILTER EFFECT                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  To participate in YAP you need:                            │
+│  1. YAP tokens (stake requirement)                          │
+│  2. SOL for gas (transaction fees)                          │
+│                                                             │
+│  If you have YAP, you almost certainly have SOL             │
+│  (you bought YAP on a DEX, which requires SOL)              │
+│                                                             │
+│  This isn't onboarding crypto-naive users.                  │
+│  This is a protocol for people already in the ecosystem.    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Benefits:**
+
+1. **Natural Sybil Defense** - Creating fake accounts costs SOL per action
+2. **Zero Protocol Operational Cost** - No relayer, no gas tank, no subsidies
+3. **True Permissionlessness** - No dependency on anyone sponsoring fees
+4. **Self-Sustaining** - Protocol works even if Yap.Network (the app) disappears
+
+**Fee Spike Tolerance:**
+
+During Solana congestion, fees may spike 10-100x temporarily. At $0.10/vote, 8 daily votes = $0.80. Still acceptable for any meaningful stakeholder. The protocol accepts this as a feature, not a bug - it naturally throttles activity during network stress.
+
+---
 
 ### Spam Prevention Through Economics
 
@@ -127,6 +176,7 @@ Result:     2M total vote weight used, but only 1M YAP exists ✗
 #### Solution: Claim-Time Validation (PREFERRED)
 
 From Knockit:
+
 > "To solve the double spend the snapshot only makes a valid reward claim if the tokens are still in the address"
 
 **How it works:**
@@ -185,7 +235,7 @@ async function processVotes(votes: Vote[]): Promise<ValidVote[]> {
       // Vote counts - use embedded weight or current balance (whichever is lower)
       validVotes.push({
         ...vote,
-        weight: Math.min(vote.embeddedWeight, currentBalance)
+        weight: Math.min(vote.embeddedWeight, currentBalance),
       });
     }
     // If balance is 0, vote is silently discarded
@@ -197,11 +247,11 @@ async function processVotes(votes: Vote[]): Promise<ValidVote[]> {
 
 **Comparison of approaches:**
 
-| Approach | Complexity | Infrastructure | UX Impact |
-|----------|------------|----------------|-----------|
-| Staking contract | High | New contract, cooldowns | Lock-up required |
-| Snapshot-based | Medium | Historical balance queries | None |
-| **Claim-time validation** | **Low** | **Just current balance check** | **None** ✓ |
+| Approach                  | Complexity | Infrastructure                 | UX Impact        |
+| ------------------------- | ---------- | ------------------------------ | ---------------- |
+| Staking contract          | High       | New contract, cooldowns        | Lock-up required |
+| Snapshot-based            | Medium     | Historical balance queries     | None             |
+| **Claim-time validation** | **Low**    | **Just current balance check** | **None** ✓       |
 
 Claim-time validation is the simplest approach - no snapshot infrastructure, no staking contract. Just check current balance at distribution time.
 
@@ -209,7 +259,7 @@ Claim-time validation is the simplest approach - no snapshot infrastructure, no 
 
 #### Alternative: Snapshot-Based Weighting
 
-*For reference, this was the previously discussed approach:*
+_For reference, this was the previously discussed approach:_
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -256,12 +306,12 @@ This is explicitly allowed and even encouraged:
 
 ### Protocol vs App Layer
 
-| Aspect | Protocol Level | App Level (Yap.Network) |
-|--------|----------------|-------------------------|
-| Content expiry | **Evergreen** (never expire) | 7-day sunset |
-| Payout cycle | **24 hours** | Same |
-| Vote limit | **First 8 by timestamp** | Part of 8 total actions |
-| Claim expiry | **Never** (claimable forever) | Same |
+| Aspect         | Protocol Level                | App Level (Yap.Network) |
+| -------------- | ----------------------------- | ----------------------- |
+| Content expiry | **Evergreen** (never expire)  | 7-day sunset            |
+| Payout cycle   | **24 hours**                  | Same                    |
+| Vote limit     | **First 8 by timestamp**      | Part of 8 total actions |
+| Claim expiry   | **Never** (claimable forever) | Same                    |
 
 ### Daily Pool Allocation
 
@@ -306,13 +356,14 @@ Author receives 100% of post rewards (no curator split at protocol level)
 
 ### Why Direct Distribution (Not Merkle)
 
-| Approach | Pros | Cons |
-|----------|------|------|
-| Merkle Claims | Gas efficient | Requires off-chain infra, proofs expire |
-| NFT Receipts | Fully on-chain | More transactions, complex |
-| **Direct Distribution** | **Simple, permissionless, forever** | **Keeper infrastructure needed** |
+| Approach                | Pros                                | Cons                                    |
+| ----------------------- | ----------------------------------- | --------------------------------------- |
+| Merkle Claims           | Gas efficient                       | Requires off-chain infra, proofs expire |
+| NFT Receipts            | Fully on-chain                      | More transactions, complex              |
+| **Direct Distribution** | **Simple, permissionless, forever** | **Keeper infrastructure needed**        |
 
 Direct Distribution was chosen because:
+
 - Rewards are **claimable forever** (like DeFi lending receipts)
 - Users can **batch claim** multiple days at once
 - No proof management or expiry concerns
@@ -346,16 +397,15 @@ Direct Distribution was chosen because:
 // Query all vote transactions for the period
 async function getVotesForPeriod(startTime: number, endTime: number) {
   // Option A: Direct RPC query
-  const signatures = await connection.getSignaturesForAddress(
-    VOTE_PROGRAM_ADDRESS,
-    { minContextSlot: startSlot }
-  );
+  const signatures = await connection.getSignaturesForAddress(VOTE_PROGRAM_ADDRESS, {
+    minContextSlot: startSlot,
+  });
 
   // Option B: Indexer (Helius, Triton) for scale
   const votes = await indexer.getTransactions({
     programId: VOTE_PROGRAM_ID,
     startTime,
-    endTime
+    endTime,
   });
 
   return votes;
@@ -367,13 +417,11 @@ async function getVotesForPeriod(startTime: number, endTime: number) {
 ```typescript
 function processVotes(rawVotes: Vote[]): ValidVote[] {
   // Group by voter
-  const byVoter = groupBy(rawVotes, v => v.voter);
+  const byVoter = groupBy(rawVotes, (v) => v.voter);
 
   // For each voter, take first 8 chronologically
-  const validVotes = Object.values(byVoter).flatMap(votes =>
-    votes
-      .sort((a, b) => a.timestamp - b.timestamp)
-      .slice(0, 8)
+  const validVotes = Object.values(byVoter).flatMap((votes) =>
+    votes.sort((a, b) => a.timestamp - b.timestamp).slice(0, 8)
   );
 
   return validVotes;
@@ -388,7 +436,7 @@ function processVotes(rawVotes: Vote[]): ValidVote[] {
 // App-level validations (not protocol level)
 async function canUserVote(userId: string, postId: string): Promise<boolean> {
   // 1. User must be registered (invite-only)
-  if (!await isRegisteredUser(userId)) return false;
+  if (!(await isRegisteredUser(userId))) return false;
 
   // 2. Check total daily actions (posts + comments + votes)
   const todayActions = await getDailyActionCount(userId);
@@ -470,6 +518,7 @@ User → API → Database → Cron → Merkle Tree → Chain → Claim
 ```
 
 **Features**:
+
 - Invite-only access
 - 8 daily actions (posts + comments + votes)
 - Curated community experience
@@ -486,6 +535,7 @@ User → Solana Vote Tx → Indexer → Distribution → Merkle → Claim
 ```
 
 **Features**:
+
 - Permissionless voting at protocol level
 - Session keys for seamless UX (Jupiter-style)
 - Any wallet with YAP can participate
@@ -506,6 +556,7 @@ Protocol Layer ─────┼─── Staking App
 ```
 
 **Features**:
+
 - Public API documentation
 - Developer tools and SDKs
 - Reference implementations
@@ -539,6 +590,80 @@ Individual apps (like Yap.Network) can impose restrictions for UX/community purp
 
 ---
 
+## Explicit Design Decisions
+
+> **📝 Added Jan 4, 2026**: Documenting key design choices that prioritize simplicity over marginal optimization.
+
+### What YAP Protocol Does NOT Have
+
+| Feature                     | Status       | Rationale                                                                                                         |
+| --------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------- |
+| **Diminishing Returns**     | ❌ Not used  | Voting 8 times on same author = 8x weight. Simpler math, no interaction tracking needed. May revisit if abused.   |
+| **Vesting/Lockups**         | ❌ Not used  | Rewards are instantly claimable. No unlock schedules. Claim-time validation already prevents gaming.              |
+| **Downvotes**               | ❌ Never     | Protocol is positive-sum only. No negative actions. App layer handles content curation via filtering, not votes.  |
+| **Fee Sponsorship**         | ❌ Not used  | Users pay their own gas. No relayers, no subsidies. Self-sustaining protocol.                                     |
+| **Vote Weight Decay**       | ❌ Not used  | No penalty for voting frequently. 8 votes = 8 votes.                                                              |
+| **Curator Rewards**         | ❌ Not used  | 100% to author. No split. Simpler economics.                                                                      |
+
+### Design Philosophy: The Simplicity Stack
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              YAP PROTOCOL SIMPLICITY STACK                  │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ❌ No diminishing returns  →  Simpler vote math            │
+│  ❌ No vesting              →  No lockup logic              │
+│  ❌ No downvotes            →  No negative sum dynamics     │
+│  ❌ No fee sponsorship      →  No relayer infrastructure    │
+│  ❌ No curator split        →  Simpler reward distribution  │
+│                                                             │
+│  ─────────────────────────────────────────────────────────  │
+│                                                             │
+│  ✓ Stake = weight           →  One number                   │
+│  ✓ User pays gas            →  Self-sustaining              │
+│  ✓ Instant claims           →  Best UX                      │
+│  ✓ Claim-time validation    →  Minimal infrastructure       │
+│                                                             │
+│  Result: Minimum viable social layer                        │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Comparison to Hive
+
+| Feature                | Hive                        | YAP Protocol                   |
+| ---------------------- | --------------------------- | ------------------------------ |
+| Transaction fees       | Zero (Resource Credits)     | User pays SOL                  |
+| Vote decay             | Yes (diminishing returns)   | No                             |
+| Reward vesting         | Yes (13-week power down)    | No (instant)                   |
+| Downvotes              | Yes                         | No                             |
+| Curator rewards        | Yes (50%)                   | No (100% to author)            |
+| Inflation source       | Native blockchain           | Fixed token supply             |
+| Content storage        | On-chain                    | Off-chain (IPFS/Arweave hash)  |
+
+YAP intentionally diverges from Hive's complexity. The goal is the **simplest efficient social layer**, not the most feature-complete.
+
+### Why No Downvotes (Ever)
+
+Downvotes introduce:
+1. **Negative sum dynamics** - Users can destroy value, not just allocate it
+2. **Brigading attacks** - Coordinated downvote campaigns
+3. **Chilling effects** - Users avoid controversial content
+4. **Complex game theory** - Downvote wars, revenge cycles
+
+YAP's solution: **App-layer curation, not protocol-level negation.**
+
+The app can:
+- Hide content based on reports
+- Deprioritize low-quality posts
+- Shadowban abusive users
+- Filter by community standards
+
+But the protocol only records positive actions. Content can earn rewards; it cannot be punished.
+
+---
+
 ## FAQ
 
 ### Why allow self-voting?
@@ -558,6 +683,7 @@ At the app level (Yap.Network): They're invited, they create quality content, th
 ### What if one entity accumulates majority stake?
 
 Protocol-level concern. Same as any token-weighted system. Mitigations include:
+
 - Curation rewards incentivizing discovery of good content
 - Diverse content creation (can't vote for yourself indefinitely)
 - Community governance evolution over time
@@ -572,15 +698,15 @@ Storage costs. Post content can be off-chain (IPFS, Arweave, or centralized) wit
 
 **Claim-time validation**: Votes embed weight at vote time, but at distribution, we check if the voter still holds tokens. If they transferred their tokens away, their votes are invalidated. This is simpler than snapshot-based weighting and requires no additional infrastructure - just a current balance check.
 
-From Knockit: *"To solve the double spend the snapshot only makes a valid reward claim if the tokens are still in the address"*
+From Knockit: _"To solve the double spend the snapshot only makes a valid reward claim if the tokens are still in the address"_
 
 ### Why not staking or snapshots?
 
-| Approach | Complexity | Why Not Preferred |
-|----------|------------|-------------------|
-| Staking | High | Requires new contract, lock-ups, cooldowns |
-| Snapshot | Medium | Requires historical balance queries/indexer |
-| **Claim-time** | **Low** | **Just check current balance at distribution** ✓ |
+| Approach       | Complexity | Why Not Preferred                                |
+| -------------- | ---------- | ------------------------------------------------ |
+| Staking        | High       | Requires new contract, lock-ups, cooldowns       |
+| Snapshot       | Medium     | Requires historical balance queries/indexer      |
+| **Claim-time** | **Low**    | **Just check current balance at distribution** ✓ |
 
 Claim-time validation achieves the same security with minimal complexity. Staking would only be needed for additional features like vote multipliers for longer lock-ups (veToken model).
 
@@ -594,7 +720,7 @@ Claim-time validation achieves the same security with minimal complexity. Stakin
 
 A post is fundamentally: **WHO** + **WHAT** + **WHEN**
 
-Full content on Solana is expensive. Solution: store content off-chain, store *proof* on-chain.
+Full content on Solana is expensive. Solution: store content off-chain, store _proof_ on-chain.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -650,25 +776,25 @@ Anyone can verify: fetch from IPFS, hash it, compare to on-chain
 
 ### What's On-Chain vs Off-Chain
 
-| On-Chain (Solana) | Off-Chain (IPFS/Arweave/CDN) |
-|-------------------|------------------------------|
-| Post/comment hashes | Actual text content |
-| Author wallet | Images/media |
-| Timestamps | Full content JSON |
-| Vote transactions | User profile data |
-| Reward claims | |
+| On-Chain (Solana)   | Off-Chain (IPFS/Arweave/CDN) |
+| ------------------- | ---------------------------- |
+| Post/comment hashes | Actual text content          |
+| Author wallet       | Images/media                 |
+| Timestamps          | Full content JSON            |
+| Vote transactions   | User profile data            |
+| Reward claims       |                              |
 
 ### Why This Makes Yap a "Social Layer"
 
 Any app that speaks this format = part of the network:
 
-| App Type | What They Post | Why Integrate |
-|----------|----------------|---------------|
-| Gaming app | Achievement unlocks | Players earn YAP for milestones |
-| Prediction market | Trade predictions | Good calls get upvoted, earn YAP |
-| NFT platform | Mint announcements | Artists earn from engagement |
-| Trading bot | Alpha calls | Verified track record, earn YAP |
-| Yap.Network | Social posts | The flagship client |
+| App Type          | What They Post      | Why Integrate                    |
+| ----------------- | ------------------- | -------------------------------- |
+| Gaming app        | Achievement unlocks | Players earn YAP for milestones  |
+| Prediction market | Trade predictions   | Good calls get upvoted, earn YAP |
+| NFT platform      | Mint announcements  | Artists earn from engagement     |
+| Trading bot       | Alpha calls         | Verified track record, earn YAP  |
+| Yap.Network       | Social posts        | The flagship client              |
 
 All posts live on the same chain. All votes flow to the same reward pool. One token economy, many apps.
 
@@ -677,10 +803,10 @@ All posts live on the same chain. All votes flow to the same reward pool. One to
 ```typescript
 // Post transaction structure
 interface PostTransaction {
-  author: PublicKey;           // Wallet that created the post
-  contentHash: string;         // IPFS CID or Arweave TX ID
-  parentHash?: string;         // null for post, hash for comment
-  timestamp: number;           // Unix timestamp
+  author: PublicKey; // Wallet that created the post
+  contentHash: string; // IPFS CID or Arweave TX ID
+  parentHash?: string; // null for post, hash for comment
+  timestamp: number; // Unix timestamp
 }
 
 // Submit post on-chain
@@ -694,7 +820,7 @@ async function submitPost(content: string): Promise<string> {
     data: {
       contentHash,
       timestamp: Date.now(),
-    }
+    },
   });
 
   return tx.signature;
@@ -735,22 +861,22 @@ App restrictions are **suggestions**, not protocol-enforced. Direct RPC interact
 
 #### Acceptable Issues (Economically Unviable)
 
-| Issue | Why It's OK |
-|-------|-------------|
+| Issue                  | Why It's OK                                                                                                                                                                                                                                  |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Post Sunset Bypass** | Voting on "expired" posts via RPC is allowed. However, vote weight is proportional to stake. Attacking old posts requires holding YAP, and rewards are proportional - no outsized gains from gaming old content. The economics self-correct. |
-| **Invite Bypass** | Non-invited users can vote via RPC, but with 0 YAP they have 0 weight. To have meaningful impact, they need to buy YAP = skin in the game. The invite system is for community curation, not economic security. |
-| **Self-Vote Farms** | Allowed at protocol level. But claim-time validation means you must hold tokens at distribution. Self-voting with borrowed tokens doesn't work. Self-voting with owned tokens = you're just allocating your own stake. |
-| **Vote Stacking** | Voting 8 times on same post is allowed. But total weight is still capped by your holdings. No economic advantage over spreading votes. |
-| **Wallet Rotation** | Using N wallets for N×8 votes splits your weight. Total influence unchanged. Just more transactions (costs you gas). |
+| **Invite Bypass**      | Non-invited users can vote via RPC, but with 0 YAP they have 0 weight. To have meaningful impact, they need to buy YAP = skin in the game. The invite system is for community curation, not economic security.                               |
+| **Self-Vote Farms**    | Allowed at protocol level. But claim-time validation means you must hold tokens at distribution. Self-voting with borrowed tokens doesn't work. Self-voting with owned tokens = you're just allocating your own stake.                       |
+| **Vote Stacking**      | Voting 8 times on same post is allowed. But total weight is still capped by your holdings. No economic advantage over spreading votes.                                                                                                       |
+| **Wallet Rotation**    | Using N wallets for N×8 votes splits your weight. Total influence unchanged. Just more transactions (costs you gas).                                                                                                                         |
 
 #### Serious Issues (Require Mitigation)
 
-| Issue | Risk | Mitigation Strategy |
-|-------|------|---------------------|
-| **Keeper Failure** | Distribution stops if keeper goes offline | Multiple redundant keepers, Clockwork automation, on-chain fallback |
-| **Keeper Compromise** | Attacker controls reward distribution | Multi-sig keeper, time-locked updates, community monitoring |
-| **RPC/Indexer Manipulation** | Wrong votes counted | Multiple RPC sources, cross-validation, on-chain event logs as source of truth |
-| **Content Hash Spam** | Protocol state bloat | Rate limiting at RPC level, minimum stake to post, storage rent |
+| Issue                        | Risk                                      | Mitigation Strategy                                                            |
+| ---------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------ |
+| **Keeper Failure**           | Distribution stops if keeper goes offline | Multiple redundant keepers, Clockwork automation, on-chain fallback            |
+| **Keeper Compromise**        | Attacker controls reward distribution     | Multi-sig keeper, time-locked updates, community monitoring                    |
+| **RPC/Indexer Manipulation** | Wrong votes counted                       | Multiple RPC sources, cross-validation, on-chain event logs as source of truth |
+| **Content Hash Spam**        | Protocol state bloat                      | Rate limiting at RPC level, minimum stake to post, storage rent                |
 
 #### Infrastructure Hardening Plan
 
@@ -779,18 +905,19 @@ App restrictions are **suggestions**, not protocol-enforced. Direct RPC interact
 
 ### Non-Issues (By Design)
 
-| Concern | Why It's Not a Problem |
-|---------|------------------------|
-| **Flash Loan Voting** | Claim-time validation requires holding tokens at snapshot. Flash loans repay in same block. |
+| Concern                     | Why It's Not a Problem                                                                                                                      |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Flash Loan Voting**       | Claim-time validation requires holding tokens at snapshot. Flash loans repay in same block.                                                 |
 | **Deleted Content Earning** | If author deletes from app but hash exists, votes still count. This is a feature - content ownership is permanent. Author can always claim. |
-| **MEV/Vote Ordering** | Solana's speed (~400ms blocks) minimizes MEV. All 8 votes from a wallet count regardless of order. |
-| **Unclaimed Balance Bloat** | Acceptable long-term tradeoff for "claimable forever" UX. Can implement cleanup incentives later if needed. |
+| **MEV/Vote Ordering**       | Solana's speed (~400ms blocks) minimizes MEV. All 8 votes from a wallet count regardless of order.                                          |
+| **Unclaimed Balance Bloat** | Acceptable long-term tradeoff for "claimable forever" UX. Can implement cleanup incentives later if needed.                                 |
 
 ### Design Philosophy
 
 > **Principle**: The protocol trusts economics over access control.
 
 Instead of trying to prevent every edge case via restrictions, we rely on:
+
 1. **Stake requirements** - Must hold YAP to have influence
 2. **Claim-time validation** - Must still hold at distribution
 3. **Proportional rewards** - No outsized gains from gaming
