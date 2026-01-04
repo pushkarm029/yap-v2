@@ -1036,24 +1036,30 @@ Full content on Solana is expensive. Solution: store content off-chain, store _p
 
 The content hash is a fingerprint. If content changes, hash changes. Provably immutable.
 
-### The Four Primitives
+### The Five Primitives
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    YAP PROTOCOL PRIMITIVES                       │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│   POST      = { author, contentHash, timestamp }                │
-│   COMMENT   = { author, contentHash, timestamp, parentId }      │
-│   VOTE      = { voter, targetHash, weight, timestamp }          │
-│   FOLLOW    = { follower, target, timestamp }                   │
+│   POST      = { author, contentHash, timestamp }      → Memo    │
+│   COMMENT   = { author, contentHash, timestamp, ... } → Memo    │
+│   VOTE      = { voter, targetHash, weight, timestamp }→ Memo    │
+│   FOLLOW    = { follower, target, timestamp }         → Memo    │
+│   PROFILE   = { wallet, username, metadataHash }      → PDA     │
 │                                                                 │
-│   All on-chain. All verifiable. All composable.                 │
+│   Social events on memo. Identity on PDA. All composable.       │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-Four primitives. That's the entire social layer.
+Five primitives. That's the entire social layer.
+
+**Why PROFILE is a PDA (not memo):**
+- Username uniqueness enforced on-chain (prevents impersonation)
+- Portable identity across all YAP apps
+- Only primitive worth the extra cost (~$0.002 rent)
 
 ### Content Flow
 
@@ -1105,14 +1111,16 @@ Social events are recorded as **memo transactions** using Solana's built-in Memo
 │                      ON-CHAIN COMPONENTS                         │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│   YAP PROGRAM (Existing)              MEMO PROGRAM (Built-in)   │
-│   ──────────────────────              ───────────────────────   │
+│   YAP PROGRAM (Existing + V2)         MEMO PROGRAM (Built-in)   │
+│   ───────────────────────────         ───────────────────────   │
 │   • Token mint (YAP)                  • POST events             │
 │   • Inflation minting                 • VOTE events             │
 │   • Merkle distribution               • COMMENT events          │
-│   • User claims                       • FOLLOW events           │
+│   • User claims                       • FOLLOW/UNFOLLOW events  │
 │   • Token burns                                                 │
-│                                       No custom program needed! │
+│   • PROFILE PDA (V2)                  No custom program needed! │
+│     └── username uniqueness                                     │
+│     └── metadata hash pointer                                   │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -1120,11 +1128,32 @@ Social events are recorded as **memo transactions** using Solana's built-in Memo
 **Memo Format:**
 
 ```
-POST:    "YAP:{"v":1,"t":"post","h":"QmXyz..."}"
-VOTE:    "YAP:{"v":1,"t":"vote","h":"QmXyz...","w":100000}"
-COMMENT: "YAP:{"v":1,"t":"comment","h":"QmAbc...","p":"QmXyz..."}"
-FOLLOW:  "YAP:{"v":1,"t":"follow","a":"7xKXtg..."}"
+POST:     "YAP:{"v":1,"t":"post","h":"QmXyz..."}"
+VOTE:     "YAP:{"v":1,"t":"vote","h":"QmXyz...","w":100000}"
+COMMENT:  "YAP:{"v":1,"t":"comment","h":"QmAbc...","p":"QmXyz..."}"
+FOLLOW:   "YAP:{"v":1,"t":"follow","a":"7xKXtg..."}"
+UNFOLLOW: "YAP:{"v":1,"t":"unfollow","a":"7xKXtg..."}"
 ```
+
+**PROFILE PDA Structure (On-Chain):**
+
+```rust
+pub struct Profile {
+    pub wallet: Pubkey,           // Owner (32 bytes)
+    pub username: [u8; 32],       // Unique on-chain, padded
+    pub metadata_hash: [u8; 32],  // IPFS pointer (bio, avatar, etc.)
+    pub bump: u8,
+}
+```
+
+**Why PROFILE is worth the PDA cost:**
+- Username uniqueness prevents impersonation
+- Portable identity works across all YAP apps
+- One-time cost (~$0.002 rent) for permanent benefit
+
+**Cost per action:**
+- Memo events: ~$0.001 (just tx fee)
+- Profile creation: ~$0.002 (one-time rent)
 
 **Submit post on-chain:**
 

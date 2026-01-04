@@ -512,16 +512,22 @@ This hybrid model creates:
 
 V2 transforms YAP into a fully on-chain social protocol. This is the next major milestone.
 
-### 11.1 The Four Primitives
+### 11.1 The Five Primitives
 
 ```
-POST    = { author, contentHash, timestamp }
-COMMENT = { author, contentHash, timestamp, parentId }
-VOTE    = { voter, targetHash, weight, timestamp }
-FOLLOW  = { follower, target, timestamp }
+POST    = { author, contentHash, timestamp }           → Memo
+COMMENT = { author, contentHash, timestamp, parentId } → Memo
+VOTE    = { voter, targetHash, weight, timestamp }     → Memo
+FOLLOW  = { follower, target, timestamp }              → Memo
+PROFILE = { wallet, username, metadataHash }           → PDA (on-chain)
 ```
 
-Four primitives. That's the entire social layer.
+Five primitives. That's the entire social layer.
+
+**Why PROFILE is a PDA (not memo):**
+- Username uniqueness enforced on-chain (prevents impersonation)
+- Portable identity across all YAP apps
+- Only primitive worth the extra cost (~$0.002 rent)
 
 ### 11.2 How It Works
 
@@ -575,16 +581,17 @@ V2 uses the simplest possible architecture:
 │                      ON-CHAIN COMPONENTS                         │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│   YAP PROGRAM (Existing)              MEMO PROGRAM (Built-in)   │
-│   ──────────────────────              ───────────────────────   │
+│   YAP PROGRAM (Existing + V2)         MEMO PROGRAM (Built-in)   │
+│   ───────────────────────────         ───────────────────────   │
 │   • Token mint (YAP)                  • POST events             │
 │   • Inflation minting                 • VOTE events             │
 │   • Vault + Pending Claims            • COMMENT events          │
-│   • Merkle-based distribution         • FOLLOW events           │
+│   • Merkle-based distribution         • FOLLOW/UNFOLLOW events  │
 │   • User claims                                                 │
 │   • Token burns                       No custom program needed! │
-│                                       Just structured JSON in   │
-│   Already deployed on devnet.         memo field of txs.        │
+│   • PROFILE PDA (V2)                  Just structured JSON in   │
+│     └── username uniqueness           memo field of txs.        │
+│     └── metadata hash pointer                                   │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -599,24 +606,43 @@ V2 uses the simplest possible architecture:
 **Social Event Format (Memo JSON):**
 
 ```
-POST:    "YAP:{"v":1,"t":"post","h":"QmXyz..."}"
-VOTE:    "YAP:{"v":1,"t":"vote","h":"QmXyz...","w":100000}"
-COMMENT: "YAP:{"v":1,"t":"comment","h":"QmAbc...","p":"QmXyz..."}"
-FOLLOW:  "YAP:{"v":1,"t":"follow","a":"7xKXtg..."}"
+POST:     "YAP:{"v":1,"t":"post","h":"QmXyz..."}"
+VOTE:     "YAP:{"v":1,"t":"vote","h":"QmXyz...","w":100000}"
+COMMENT:  "YAP:{"v":1,"t":"comment","h":"QmAbc...","p":"QmXyz..."}"
+FOLLOW:   "YAP:{"v":1,"t":"follow","a":"7xKXtg..."}"
+UNFOLLOW: "YAP:{"v":1,"t":"unfollow","a":"7xKXtg..."}"
 ```
 
-| Field | Meaning                           |
-| ----- | --------------------------------- |
-| `v`   | Version (for upgrades)            |
-| `t`   | Type: post, vote, comment, follow |
-| `h`   | Content hash (IPFS CID)           |
-| `w`   | Weight (YAP balance at vote time) |
-| `p`   | Parent hash (for comments)        |
-| `a`   | Address (for follows)             |
+| Field | Meaning                                    |
+| ----- | ------------------------------------------ |
+| `v`   | Version (for upgrades)                     |
+| `t`   | Type: post, vote, comment, follow/unfollow |
+| `h`   | Content hash (IPFS CID)                    |
+| `w`   | Weight (YAP balance at vote time)          |
+| `p`   | Parent hash (for comments)                 |
+| `a`   | Address (for follows)                      |
 
 Vote weight is embedded at vote time but validated at distribution time (claim-time validation).
 
-**Cost per action: ~$0.001** (just Solana tx fee, no rent)
+**PROFILE PDA Structure (On-Chain):**
+
+```rust
+pub struct Profile {
+    pub wallet: Pubkey,           // Owner (32 bytes)
+    pub username: [u8; 32],       // Unique on-chain, padded
+    pub metadata_hash: [u8; 32],  // IPFS pointer (bio, avatar, etc.)
+    pub bump: u8,
+}
+```
+
+**Why PROFILE is worth the PDA cost:**
+- Username uniqueness prevents impersonation
+- Portable identity works across all YAP apps
+- One-time cost (~$0.002 rent) for permanent benefit
+
+**Cost per action:**
+- Memo events: ~$0.001 (just tx fee)
+- Profile creation: ~$0.002 (one-time rent)
 
 ### 11.6 Content Storage
 
