@@ -139,6 +139,39 @@ This is negligible for anyone with meaningful YAP stake.
 
 During Solana congestion, fees may spike 10-100x temporarily. At $0.10/vote, 8 daily votes = $0.80. Still acceptable for any meaningful stakeholder. The protocol accepts this as a feature, not a bug - it naturally throttles activity during network stress.
 
+**Future: Gasless Sponsorship (Optional)**
+
+The protocol can later support gasless transactions via fee sponsorship:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 GASLESS UPGRADE PATH                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Current: User pays SOL for each transaction                │
+│                                                             │
+│  Future Option: App sponsors gas                            │
+│  • User signs transaction                                   │
+│  • Relayer submits and pays SOL                             │
+│  • App funds relayer from treasury/revenue                  │
+│                                                             │
+│  Benefits:                                                  │
+│  • Zero-friction UX (like Lens)                             │
+│  • Lower barrier for new users                              │
+│  • App controls cost (can add limits)                       │
+│                                                             │
+│  Tradeoffs:                                                 │
+│  • Operational cost for app                                 │
+│  • Centralization (relayer dependency)                      │
+│  • Weaker Sybil defense (no gas cost per action)            │
+│                                                             │
+│  Implementation: Solana's Durable Nonces + Relayer service  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+This is an **app-level choice**, not a protocol change. The protocol always accepts valid signed transactions regardless of who pays gas. Individual apps (like Yap.Network) can choose to sponsor fees for their users.
+
 ---
 
 ### Spam Prevention Through Economics
@@ -564,6 +597,98 @@ Protocol Layer ─────┼─── Staking App
 
 **Purpose**: Network effects, ecosystem growth
 
+### Phase 4: On-Chain Rule Enforcement (Future)
+
+> **📝 Added Jan 4, 2026**: Inspired by Lens Protocol's Rules system.
+
+**Current State**: Rules enforced at app layer
+
+```
+User → App validates (8 actions?) → Submit tx → Chain accepts anything
+```
+
+**Future State**: Rules enforced at protocol layer
+
+```
+User → Submit tx → Contract validates (8 actions?) → Accept/Reject
+```
+
+**What This Enables:**
+
+| Rule | Current (App-Layer) | Future (On-Chain) |
+| ---- | ------------------- | ----------------- |
+| 8 votes/day limit | Backend check, bypassable via RPC | Smart contract rejects 9th vote |
+| Minimum stake to vote | Backend check | Contract checks balance |
+| Vote weight cap | Backend calculation | Contract enforces max weight |
+| Cooldown periods | Database timestamp | On-chain block height check |
+
+**Why This Matters:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              ON-CHAIN RULE ENFORCEMENT                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  App-layer enforcement:                                     │
+│  • Bypassable via direct RPC calls                          │
+│  • "Trust us" security model                                │
+│  • Different apps can have different rules                  │
+│                                                             │
+│  On-chain enforcement:                                      │
+│  • Unhackable (code is law)                                 │
+│  • Trustless verification                                   │
+│  • Protocol-level guarantees                                │
+│  • All apps share same base rules                           │
+│                                                             │
+│  Tradeoff: Less flexibility, more rigidity                  │
+│  But: Core rules (like 8/day limit) should be rigid         │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Implementation (Solana Program):**
+
+```rust
+// Pseudo-code for on-chain vote validation
+pub fn process_vote(ctx: Context<Vote>, post_hash: [u8; 32]) -> Result<()> {
+    let voter = &ctx.accounts.voter;
+    let vote_counter = &mut ctx.accounts.vote_counter;
+
+    // Check: Is this a new day?
+    let current_day = Clock::get()?.unix_timestamp / 86400;
+    if vote_counter.last_day != current_day {
+        vote_counter.count = 0;
+        vote_counter.last_day = current_day;
+    }
+
+    // Enforce: 8 votes per day max
+    require!(vote_counter.count < 8, ErrorCode::DailyLimitReached);
+
+    // Check: Does voter have YAP tokens?
+    let yap_balance = get_token_balance(voter)?;
+    require!(yap_balance > 0, ErrorCode::NoStake);
+
+    // Record vote with embedded weight
+    emit!(VoteEvent {
+        voter: voter.key(),
+        post_hash,
+        weight: yap_balance,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+
+    vote_counter.count += 1;
+    Ok(())
+}
+```
+
+**Phased Rollout:**
+
+1. **Phase 4a**: Deploy read-only rule contract (validates but doesn't enforce)
+2. **Phase 4b**: Shadow mode (logs violations, doesn't block)
+3. **Phase 4c**: Enforcement mode (contract rejects invalid transactions)
+
+This preserves the current "protocol accepts everything, app filters" model while building toward trustless enforcement.
+
 ---
 
 ## Key Design Principles
@@ -596,14 +721,14 @@ Individual apps (like Yap.Network) can impose restrictions for UX/community purp
 
 ### What YAP Protocol Does NOT Have
 
-| Feature                     | Status       | Rationale                                                                                                         |
-| --------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------- |
-| **Diminishing Returns**     | ❌ Not used  | Voting 8 times on same author = 8x weight. Simpler math, no interaction tracking needed. May revisit if abused.   |
-| **Vesting/Lockups**         | ❌ Not used  | Rewards are instantly claimable. No unlock schedules. Claim-time validation already prevents gaming.              |
-| **Downvotes**               | ❌ Never     | Protocol is positive-sum only. No negative actions. App layer handles content curation via filtering, not votes.  |
-| **Fee Sponsorship**         | ❌ Not used  | Users pay their own gas. No relayers, no subsidies. Self-sustaining protocol.                                     |
-| **Vote Weight Decay**       | ❌ Not used  | No penalty for voting frequently. 8 votes = 8 votes.                                                              |
-| **Curator Rewards**         | ❌ Not used  | 100% to author. No split. Simpler economics.                                                                      |
+| Feature                 | Status      | Rationale                                                                                                        |
+| ----------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| **Diminishing Returns** | ❌ Not used | Voting 8 times on same author = 8x weight. Simpler math, no interaction tracking needed. May revisit if abused.  |
+| **Vesting/Lockups**     | ❌ Not used | Rewards are instantly claimable. No unlock schedules. Claim-time validation already prevents gaming.             |
+| **Downvotes**           | ❌ Never    | Protocol is positive-sum only. No negative actions. App layer handles content curation via filtering, not votes. |
+| **Fee Sponsorship**     | ❌ Not used | Users pay their own gas. No relayers, no subsidies. Self-sustaining protocol.                                    |
+| **Vote Weight Decay**   | ❌ Not used | No penalty for voting frequently. 8 votes = 8 votes.                                                             |
+| **Curator Rewards**     | ❌ Not used | 100% to author. No split. Simpler economics.                                                                     |
 
 ### Design Philosophy: The Simplicity Stack
 
@@ -632,21 +757,54 @@ Individual apps (like Yap.Network) can impose restrictions for UX/community purp
 
 ### Comparison to Hive
 
-| Feature                | Hive                        | YAP Protocol                   |
-| ---------------------- | --------------------------- | ------------------------------ |
-| Transaction fees       | Zero (Resource Credits)     | User pays SOL                  |
-| Vote decay             | Yes (diminishing returns)   | No                             |
-| Reward vesting         | Yes (13-week power down)    | No (instant)                   |
-| Downvotes              | Yes                         | No                             |
-| Curator rewards        | Yes (50%)                   | No (100% to author)            |
-| Inflation source       | Native blockchain           | Fixed token supply             |
-| Content storage        | On-chain                    | Off-chain (IPFS/Arweave hash)  |
+| Feature          | Hive                      | YAP Protocol                  |
+| ---------------- | ------------------------- | ----------------------------- |
+| Transaction fees | Zero (Resource Credits)   | User pays SOL                 |
+| Vote decay       | Yes (diminishing returns) | No                            |
+| Reward vesting   | Yes (13-week power down)  | No (instant)                  |
+| Downvotes        | Yes                       | No                            |
+| Curator rewards  | Yes (50%)                 | No (100% to author)           |
+| Inflation source | Native blockchain         | Fixed token supply            |
+| Content storage  | On-chain                  | Off-chain (IPFS/Arweave hash) |
+
+### Comparison to Lens
+
+> **📝 Added Jan 4, 2026**: Lens Protocol research insights.
+
+| Feature             | Lens Protocol                     | YAP Protocol                        |
+| ------------------- | --------------------------------- | ----------------------------------- |
+| Blockchain          | ZKsync (Ethereum L2)              | Solana                              |
+| Transaction fees    | GHO stablecoin (~$0.01-0.05)      | SOL (~$0.001)                       |
+| Fee sponsorship     | Native (apps can sponsor)         | Future option (not default)         |
+| Reward mechanism    | None built-in (collect fees)      | Daily pool distribution             |
+| Rule enforcement    | On-chain (Rules contracts)        | App-layer now, on-chain future      |
+| Content storage     | Grove nodes (deletable)           | IPFS/Arweave (permanent)            |
+| Onboarding          | Email/phone (Web2-like)           | Wallet-only (crypto-native)         |
+| Account model       | Profile NFTs                      | Wallet = identity                   |
+
+**What YAP Borrows from Lens:**
+
+| Lens Feature | YAP Adoption | Status |
+| ------------ | ------------ | ------ |
+| On-chain rule enforcement | Phase 4 roadmap | Future |
+| Gasless sponsorship | Optional app-layer feature | Future |
+| Modular primitives (POST, VOTE, etc.) | Core protocol design | Now |
+
+**What YAP Intentionally Differs On:**
+
+| Lens Approach | YAP Approach | Rationale |
+| ------------- | ------------ | --------- |
+| No built-in rewards | Daily reward pool | Core value prop is earning |
+| Collect = monetization | Vote = reward allocation | Social signal, not payment |
+| Deletable content (Grove) | Permanent hashes | On-chain = forever |
+| Profile NFTs | Wallet = identity | Simpler, no NFT overhead |
 
 YAP intentionally diverges from Hive's complexity. The goal is the **simplest efficient social layer**, not the most feature-complete.
 
 ### Why No Downvotes (Ever)
 
 Downvotes introduce:
+
 1. **Negative sum dynamics** - Users can destroy value, not just allocate it
 2. **Brigading attacks** - Coordinated downvote campaigns
 3. **Chilling effects** - Users avoid controversial content
@@ -655,6 +813,7 @@ Downvotes introduce:
 YAP's solution: **App-layer curation, not protocol-level negation.**
 
 The app can:
+
 - Hide content based on reports
 - Deprioritize low-quality posts
 - Shadowban abusive users
