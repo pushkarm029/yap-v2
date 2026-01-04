@@ -252,42 +252,71 @@ This is explicitly allowed and even encouraged:
 
 ## Rewards Distribution
 
+> **📝 Updated Jan 4, 2026 12:15 AM**: Clarified after discussion with Knockit - Direct Distribution model, 24-hour cycles, permissionless forever-claimable rewards.
+
+### Protocol vs App Layer
+
+| Aspect | Protocol Level | App Level (Yap.Network) |
+|--------|----------------|-------------------------|
+| Content expiry | **Evergreen** (never expire) | 7-day sunset |
+| Payout cycle | **24 hours** | Same |
+| Vote limit | **First 8 by timestamp** | Part of 8 total actions |
+| Claim expiry | **Never** (claimable forever) | Same |
+
 ### Daily Pool Allocation
 
 ```
-Daily Pool = X YAP tokens (configured)
+Daily Pool = Annual Inflation / 365
 
 For each post:
   post_rewards = (sum of weighted votes for post) / (sum of all weighted votes) × Daily Pool
 
-For each voter:
-  voter_rewards = curator_share × their_contribution_to_winning_posts
+Author receives 100% of post rewards (no curator split at protocol level)
 ```
 
-### Distribution Flow
+### Distribution Flow (Direct Distribution)
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                     DAILY DISTRIBUTION CYCLE                      │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  1. SNAPSHOT (Every 24 hours)                                    │
-│     • Read all vote transactions from chain                      │
-│     • Group by voter, take first 8 chronologically               │
-│     • Capture vote weight (YAP balance at vote time)             │
+│  THROUGHOUT DAY:                                                 │
+│  • Users post (content hash on-chain)                            │
+│  • Users vote (vote tx on-chain, weight embedded)                │
 │                                                                  │
-│  2. CALCULATE                                                    │
-│     • Sum weighted votes per post                                │
-│     • Calculate proportional share of daily pool                 │
-│     • Split between author rewards and curator rewards           │
+│  2:00 AM UTC - SNAPSHOT:                                         │
+│  • Read all vote transactions from past 24 hours                 │
+│  • For each vote, check: does voter still have tokens?           │
+│  • Filter: first 8 votes per wallet (by timestamp)               │
+│  • Invalidate votes from wallets with 0 balance                  │
 │                                                                  │
-│  3. DISTRIBUTE                                                   │
-│     • Build merkle tree of all rewards                           │
-│     • Submit merkle root on-chain                                │
-│     • Users claim their rewards via merkle proof                 │
+│  DISTRIBUTION (Keeper runs after snapshot):                      │
+│  • Calculate rewards per author from valid votes                 │
+│  • Update on-chain: author.claimableBalance += reward            │
+│  • No expiry - balances accumulate forever                       │
+│                                                                  │
+│  CLAIM (User-initiated, anytime):                                │
+│  • Author calls claim() on distribution contract                 │
+│  • Receives all accumulated claimable tokens                     │
+│  • Permissionless, no time limit                                 │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
+
+### Why Direct Distribution (Not Merkle)
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| Merkle Claims | Gas efficient | Requires off-chain infra, proofs expire |
+| NFT Receipts | Fully on-chain | More transactions, complex |
+| **Direct Distribution** | **Simple, permissionless, forever** | **Keeper infrastructure needed** |
+
+Direct Distribution was chosen because:
+- Rewards are **claimable forever** (like DeFi lending receipts)
+- Users can **batch claim** multiple days at once
+- No proof management or expiry concerns
+- Simple contract logic: just update a balance, let users withdraw
 
 ---
 
@@ -554,6 +583,220 @@ From Knockit: *"To solve the double spend the snapshot only makes a valid reward
 | **Claim-time** | **Low** | **Just check current balance at distribution** ✓ |
 
 Claim-time validation achieves the same security with minimal complexity. Staking would only be needed for additional features like vote multipliers for longer lock-ups (veToken model).
+
+---
+
+## On-Chain Social Primitives
+
+> **📝 Added Jan 3, 2026 11:45 PM**: On-chain posting architecture to complement the voting layer.
+
+### The Core Insight
+
+A post is fundamentally: **WHO** + **WHAT** + **WHEN**
+
+Full content on Solana is expensive. Solution: store content off-chain, store *proof* on-chain.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ON-CHAIN POST                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   {                                                             │
+│     author: "7xKXtg2...",        ← WHO (wallet pubkey)          │
+│     contentHash: "QmXyz...",     ← WHAT (IPFS/Arweave hash)     │
+│     timestamp: 1704067200        ← WHEN (unix timestamp)        │
+│   }                                                             │
+│                                                                 │
+│   Size: ~100 bytes | Cost: ~$0.001                              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+The content hash is a fingerprint. If content changes, hash changes. Provably immutable.
+
+### The Four Primitives
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    YAP PROTOCOL PRIMITIVES                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   POST      = { author, contentHash, timestamp }                │
+│   COMMENT   = { author, contentHash, timestamp, parentId }      │
+│   VOTE      = { voter, targetHash, weight, timestamp }          │
+│   FOLLOW    = { follower, target, timestamp }                   │
+│                                                                 │
+│   All on-chain. All verifiable. All composable.                 │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Four primitives. That's the entire social layer.
+
+### Content Flow
+
+```
+User writes "gm everyone!"
+        ↓
+App uploads text to IPFS → returns hash "QmXyz..."
+        ↓
+App submits Solana tx: { author, contentHash, timestamp }
+        ↓
+Post exists on-chain (proof)
+Content exists on IPFS (data)
+        ↓
+Anyone can verify: fetch from IPFS, hash it, compare to on-chain
+```
+
+### What's On-Chain vs Off-Chain
+
+| On-Chain (Solana) | Off-Chain (IPFS/Arweave/CDN) |
+|-------------------|------------------------------|
+| Post/comment hashes | Actual text content |
+| Author wallet | Images/media |
+| Timestamps | Full content JSON |
+| Vote transactions | User profile data |
+| Reward claims | |
+
+### Why This Makes Yap a "Social Layer"
+
+Any app that speaks this format = part of the network:
+
+| App Type | What They Post | Why Integrate |
+|----------|----------------|---------------|
+| Gaming app | Achievement unlocks | Players earn YAP for milestones |
+| Prediction market | Trade predictions | Good calls get upvoted, earn YAP |
+| NFT platform | Mint announcements | Artists earn from engagement |
+| Trading bot | Alpha calls | Verified track record, earn YAP |
+| Yap.Network | Social posts | The flagship client |
+
+All posts live on the same chain. All votes flow to the same reward pool. One token economy, many apps.
+
+### Implementation
+
+```typescript
+// Post transaction structure
+interface PostTransaction {
+  author: PublicKey;           // Wallet that created the post
+  contentHash: string;         // IPFS CID or Arweave TX ID
+  parentHash?: string;         // null for post, hash for comment
+  timestamp: number;           // Unix timestamp
+}
+
+// Submit post on-chain
+async function submitPost(content: string): Promise<string> {
+  // 1. Upload content to IPFS/Arweave
+  const contentHash = await uploadToIPFS(content);
+
+  // 2. Submit transaction with hash
+  const tx = await sendTransaction({
+    instruction: 'post',
+    data: {
+      contentHash,
+      timestamp: Date.now(),
+    }
+  });
+
+  return tx.signature;
+}
+```
+
+### Third-Party Integration
+
+Any app can:
+
+1. **Submit posts** - Same transaction format, recorded on-chain
+2. **Read posts** - Query Solana for all post transactions
+3. **Submit votes** - Vote on any content hash
+4. **Claim rewards** - If their users receive votes, they earn
+
+The protocol doesn't care which app submitted the post. Votes and rewards work the same way across all apps.
+
+---
+
+## Edge Cases & Attack Vectors
+
+> **📝 Added Jan 4, 2026 12:30 AM**: Analysis of potential issues arising from permissionless protocol + curated app architecture.
+
+### The Core Tension
+
+```
+PROTOCOL (Permissionless)          APP (Yap.Network)
+─────────────────────────          ─────────────────────
+• Anyone can vote via RPC    vs    • Invite-only
+• Posts are evergreen        vs    • 7-day sunset
+• No invite check            vs    • Curated community
+• 8 votes per wallet         vs    • 8 total actions
+```
+
+App restrictions are **suggestions**, not protocol-enforced. Direct RPC interaction bypasses all app-level rules.
+
+### Issue Analysis
+
+#### Acceptable Issues (Economically Unviable)
+
+| Issue | Why It's OK |
+|-------|-------------|
+| **Post Sunset Bypass** | Voting on "expired" posts via RPC is allowed. However, vote weight is proportional to stake. Attacking old posts requires holding YAP, and rewards are proportional - no outsized gains from gaming old content. The economics self-correct. |
+| **Invite Bypass** | Non-invited users can vote via RPC, but with 0 YAP they have 0 weight. To have meaningful impact, they need to buy YAP = skin in the game. The invite system is for community curation, not economic security. |
+| **Self-Vote Farms** | Allowed at protocol level. But claim-time validation means you must hold tokens at distribution. Self-voting with borrowed tokens doesn't work. Self-voting with owned tokens = you're just allocating your own stake. |
+| **Vote Stacking** | Voting 8 times on same post is allowed. But total weight is still capped by your holdings. No economic advantage over spreading votes. |
+| **Wallet Rotation** | Using N wallets for N×8 votes splits your weight. Total influence unchanged. Just more transactions (costs you gas). |
+
+#### Serious Issues (Require Mitigation)
+
+| Issue | Risk | Mitigation Strategy |
+|-------|------|---------------------|
+| **Keeper Failure** | Distribution stops if keeper goes offline | Multiple redundant keepers, Clockwork automation, on-chain fallback |
+| **Keeper Compromise** | Attacker controls reward distribution | Multi-sig keeper, time-locked updates, community monitoring |
+| **RPC/Indexer Manipulation** | Wrong votes counted | Multiple RPC sources, cross-validation, on-chain event logs as source of truth |
+| **Content Hash Spam** | Protocol state bloat | Rate limiting at RPC level, minimum stake to post, storage rent |
+
+#### Infrastructure Hardening Plan
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                 INFRASTRUCTURE RESILIENCE                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  KEEPER REDUNDANCY:                                             │
+│  • Primary: Clockwork automation (decentralized cron)           │
+│  • Backup: Self-hosted keeper with monitoring                   │
+│  • Fallback: Manual distribution via multi-sig                  │
+│                                                                 │
+│  DATA INTEGRITY:                                                │
+│  • Source of truth: On-chain transaction logs                   │
+│  • Multiple RPC endpoints for cross-validation                  │
+│  • Indexer (Helius) as optimization, not dependency             │
+│                                                                 │
+│  MONITORING:                                                    │
+│  • Alert on missed distributions                                │
+│  • Track keeper wallet balance                                  │
+│  • Community dashboard for transparency                         │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Non-Issues (By Design)
+
+| Concern | Why It's Not a Problem |
+|---------|------------------------|
+| **Flash Loan Voting** | Claim-time validation requires holding tokens at snapshot. Flash loans repay in same block. |
+| **Deleted Content Earning** | If author deletes from app but hash exists, votes still count. This is a feature - content ownership is permanent. Author can always claim. |
+| **MEV/Vote Ordering** | Solana's speed (~400ms blocks) minimizes MEV. All 8 votes from a wallet count regardless of order. |
+| **Unclaimed Balance Bloat** | Acceptable long-term tradeoff for "claimable forever" UX. Can implement cleanup incentives later if needed. |
+
+### Design Philosophy
+
+> **Principle**: The protocol trusts economics over access control.
+
+Instead of trying to prevent every edge case via restrictions, we rely on:
+1. **Stake requirements** - Must hold YAP to have influence
+2. **Claim-time validation** - Must still hold at distribution
+3. **Proportional rewards** - No outsized gains from gaming
+4. **Transparency** - All actions on-chain, auditable
+
+The app layer handles community curation. The protocol layer handles economic security.
 
 ---
 
