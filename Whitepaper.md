@@ -564,64 +564,59 @@ Any app that speaks this format = part of the network:
 
 All posts live on the same chain. All votes flow to the same reward pool. One token economy, many apps.
 
-### 11.5 Transaction Structure
+### 11.5 Smart Contract Architecture
 
-**Storage Model: Events + Selective PDAs**
+**Minimal Design: 1 Program + Memo Transactions**
 
-We use a hybrid approach optimized for cost and scale:
-
-| Primitive | Storage     | Cost    | Reasoning                               |
-| --------- | ----------- | ------- | --------------------------------------- |
-| POST      | Event only  | ~$0.001 | High volume, indexer reconstructs       |
-| COMMENT   | Event only  | ~$0.001 | High volume, references parent          |
-| VOTE      | Event only  | ~$0.001 | Very high volume, weight embedded       |
-| FOLLOW    | PDA account | ~$0.15  | Low volume, useful for on-chain queries |
-
-**Why Events over PDAs for high-volume actions:**
+V2 uses the simplest possible architecture:
 
 ```
-PDA approach:    1M posts × $0.15 rent = $150,000
-Event approach:  1M posts × $0.001 tx  = $1,000
-
-Events are 150x cheaper at scale.
+┌─────────────────────────────────────────────────────────────────┐
+│                      ON-CHAIN COMPONENTS                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   YAP PROGRAM (Existing)              MEMO PROGRAM (Built-in)   │
+│   ──────────────────────              ───────────────────────   │
+│   • Token mint (YAP)                  • POST events             │
+│   • Inflation minting                 • VOTE events             │
+│   • Vault + Pending Claims            • COMMENT events          │
+│   • Merkle-based distribution         • FOLLOW events           │
+│   • User claims                                                 │
+│   • Token burns                       No custom program needed! │
+│                                       Just structured JSON in   │
+│   Already deployed on devnet.         memo field of txs.        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-**Vote Transaction Structure:**
+**Why this is optimal:**
+
+- 1 custom program (already built and tested)
+- Social events use Solana's built-in Memo program
+- Zero additional contract development for V2
+- Minimal audit surface
+
+**Social Event Format (Memo JSON):**
 
 ```
-VoteCreated {
-    voter: Pubkey,           // Who voted
-    target_hash: [u8; 32],   // What they voted on (content hash)
-    weight: u64,             // YAP balance at vote time
-    timestamp: i64           // When
-}
+POST:    "YAP:{"v":1,"t":"post","h":"QmXyz..."}"
+VOTE:    "YAP:{"v":1,"t":"vote","h":"QmXyz...","w":100000}"
+COMMENT: "YAP:{"v":1,"t":"comment","h":"QmAbc...","p":"QmXyz..."}"
+FOLLOW:  "YAP:{"v":1,"t":"follow","a":"7xKXtg..."}"
 ```
+
+| Field | Meaning                           |
+| ----- | --------------------------------- |
+| `v`   | Version (for upgrades)            |
+| `t`   | Type: post, vote, comment, follow |
+| `h`   | Content hash (IPFS CID)           |
+| `w`   | Weight (YAP balance at vote time) |
+| `p`   | Parent hash (for comments)        |
+| `a`   | Address (for follows)             |
 
 Vote weight is embedded at vote time but validated at distribution time (claim-time validation).
 
-**Program Architecture: Core + Extensions**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    YAP CORE (Immutable)                     │
-├─────────────────────────────────────────────────────────────┤
-│  • Token operations (mint, burn, transfer)                  │
-│  • Basic primitives (POST, VOTE, FOLLOW events)             │
-│  • Reward claim function                                    │
-│  • User balance tracking                                    │
-│                                                             │
-│  Once audited and deployed, NEVER changes.                  │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  YAP EXTENSIONS (Upgradeable)               │
-├─────────────────────────────────────────────────────────────┤
-│  • 8-vote limit enforcement (Phase 4)                       │
-│  • Gasless transaction support (future)                     │
-│  • New primitive types                                      │
-└─────────────────────────────────────────────────────────────┘
-```
+**Cost per action: ~$0.001** (just Solana tx fee, no rent)
 
 ### 11.6 Content Storage
 
@@ -668,40 +663,48 @@ Verification: Fetch IPFS, hash it, compare to on-chain
 
 Raw Solana RPC cannot efficiently query "all votes for post X in last 24 hours." You'd have to fetch ALL transactions and filter locally. Indexers solve this.
 
-**Standard DApp Pattern:**
+**Multi-App Architecture (Public Data):**
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      SOLANA BLOCKCHAIN                       │
-│  Transactions confirmed, events emitted                      │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                           │ ~500ms (Geyser plugin)
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     HELIUS INDEXER                           │
-│  • Streams all transactions in real-time                    │
-│  • Parses events using program IDL                          │
-│  • Stores in queryable database                             │
-│  • Provides REST API + webhooks                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                      SOLANA BLOCKCHAIN                           │
+│                                                                 │
+│   All YAP memo transactions are PUBLIC                          │
+│   The blockchain IS the API                                     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
                            │
          ┌─────────────────┼─────────────────┐
          ▼                 ▼                 ▼
-    ┌─────────┐      ┌──────────┐      ┌──────────┐
-    │   APP   │      │  KEEPER  │      │ ANALYTICS│
-    │ Show UI │      │ Daily    │      │ Dashboards│
-    │         │      │ distro   │      │          │
-    └─────────┘      └──────────┘      └──────────┘
+   ┌───────────┐     ┌───────────┐     ┌───────────┐
+   │  Helius   │     │  Triton   │     │  Custom   │
+   │  Indexer  │     │  Indexer  │     │  Indexer  │
+   └───────────┘     └───────────┘     └───────────┘
+         │                 │                 │
+         ▼                 ▼                 ▼
+   ┌───────────┐     ┌───────────┐     ┌───────────┐
+   │Yap.Network│     │ Staking   │     │ Trading   │
+   │  (App 1)  │     │ App (2)   │     │ App (3)   │
+   └───────────┘     └───────────┘     └───────────┘
 ```
 
-**This is how ALL major Solana apps work:**
+**This is what makes YAP a "social layer":**
 
-- Jupiter uses Helius
-- Magic Eden uses Helius
-- Tensor uses Helius
+| Data                            | Visibility      | Who Can Access      |
+| ------------------------------- | --------------- | ------------------- |
+| POST/VOTE/COMMENT/FOLLOW events | Public on-chain | Any app             |
+| Indexer APIs (Helius, etc.)     | Public          | Anyone with API key |
+| Vote history                    | Public          | Any app can query   |
+| Reward claims                   | Public          | Any app can verify  |
 
-**Why This Is Still a "True DApp":**
+**Third-party apps can:**
+
+1. Use the same Helius API as Yap.Network
+2. Run their own indexer (Geyser plugin)
+3. Build their own UI on top of YAP social data
+4. Submit social events that earn YAP rewards
+
+**Why This Is a "True DApp":**
 
 | Aspect               | Status                            |
 | -------------------- | --------------------------------- |
@@ -709,8 +712,9 @@ Raw Solana RPC cannot efficiently query "all votes for post X in last 24 hours."
 | Verifiable by anyone | Yes, fetch raw txs ✓              |
 | Censorship resistant | Data on Solana ✓                  |
 | Indexer replaceable  | Use any indexer or run your own ✓ |
+| Multi-app compatible | Any app can read/write ✓          |
 
-The indexer is a **convenience layer**, not a **trust layer**. The blockchain remains the source of truth.
+The indexer is a **convenience layer**, not a **trust layer**. The blockchain remains the source of truth. Yap.Network is just one client — the protocol is open to all.
 
 ---
 

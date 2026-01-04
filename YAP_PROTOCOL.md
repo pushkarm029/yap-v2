@@ -1094,34 +1094,69 @@ Any app that speaks this format = part of the network:
 
 All posts live on the same chain. All votes flow to the same reward pool. One token economy, many apps.
 
-### Implementation
+### Implementation: Memo Transactions
+
+**V2 uses the simplest possible architecture:**
+
+Social events are recorded as **memo transactions** using Solana's built-in Memo program. No custom social contract needed.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      ON-CHAIN COMPONENTS                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   YAP PROGRAM (Existing)              MEMO PROGRAM (Built-in)   │
+│   ──────────────────────              ───────────────────────   │
+│   • Token mint (YAP)                  • POST events             │
+│   • Inflation minting                 • VOTE events             │
+│   • Merkle distribution               • COMMENT events          │
+│   • User claims                       • FOLLOW events           │
+│   • Token burns                                                 │
+│                                       No custom program needed! │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Memo Format:**
+
+```
+POST:    "YAP:{"v":1,"t":"post","h":"QmXyz..."}"
+VOTE:    "YAP:{"v":1,"t":"vote","h":"QmXyz...","w":100000}"
+COMMENT: "YAP:{"v":1,"t":"comment","h":"QmAbc...","p":"QmXyz..."}"
+FOLLOW:  "YAP:{"v":1,"t":"follow","a":"7xKXtg..."}"
+```
+
+**Submit post on-chain:**
 
 ```typescript
-// Post transaction structure
-interface PostTransaction {
-  author: PublicKey; // Wallet that created the post
-  contentHash: string; // IPFS CID or Arweave TX ID
-  parentHash?: string; // null for post, hash for comment
-  timestamp: number; // Unix timestamp
-}
+import { Transaction, TransactionInstruction } from '@solana/web3.js';
 
-// Submit post on-chain
 async function submitPost(content: string): Promise<string> {
-  // 1. Upload content to IPFS/Arweave
+  // 1. Upload content to IPFS
   const contentHash = await uploadToIPFS(content);
 
-  // 2. Submit transaction with hash
-  const tx = await sendTransaction({
-    instruction: 'post',
-    data: {
-      contentHash,
-      timestamp: Date.now(),
-    },
+  // 2. Create memo transaction
+  const memoData = JSON.stringify({ v: 1, t: 'post', h: contentHash });
+  const memoInstruction = new TransactionInstruction({
+    keys: [{ pubkey: wallet.publicKey, isSigner: true, isWritable: false }],
+    programId: MEMO_PROGRAM_ID,
+    data: Buffer.from(`YAP:${memoData}`),
   });
 
-  return tx.signature;
+  // 3. Send transaction
+  const tx = new Transaction().add(memoInstruction);
+  const signature = await sendAndConfirmTransaction(connection, tx, [wallet]);
+
+  return signature;
 }
 ```
+
+**Why memo transactions:**
+
+- Zero additional contract development
+- Minimal audit surface
+- Standard Solana pattern
+- Indexer-friendly (Helius parses memos automatically)
 
 ### Third-Party Integration
 
